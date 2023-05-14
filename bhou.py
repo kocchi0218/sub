@@ -1,22 +1,48 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+
+# HTMLエンティティに変換する関数
+def escape_html(df):
+    return df.replace('<', '&lt;').replace('>', '&gt;')
 
 # データのアップロード
 uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx", "xls"])
 if uploaded_file is not None:
     data = pd.read_excel(uploaded_file)
 
-    # 列名の確認
-    st.write(data.columns.tolist())
+    # 列名の選択
+    st.subheader('Choose Columns')
 
-    # 列の選択
-    column_to_display = st.selectbox("Which column to display?", data.columns.tolist())
+    selected_columns = st.multiselect('Select Columns', data.columns)
+    selected_data = data[selected_columns]
+    
+    if selected_columns:
+        st.subheader('Choose Values')
+        for column in selected_columns:
+            unique_values = data[column].unique()
+            selected_values = st.multiselect(f'Select {column}', unique_values)
+            if selected_values:
+                selected_data = selected_data[selected_data[column].isin(selected_values)]
 
-    # 選択した列のデータを表示
-    st.write(data[column_to_display])
+    # 数値型の列を整数に変換
+    numerical_columns = selected_data.select_dtypes(include=[np.number]).columns
+    selected_data[numerical_columns] = selected_data[numerical_columns].apply(lambda x: x.round(0).astype(int))
 
-    # データの抽出
-    st.subheader('Extracted Data')
-    select_line = st.selectbox('Select Line', data['ライン名'].unique())
-    selected_data = data[data['ライン名'] == select_line]
-    st.write(selected_data)
+    # HTMLエンティティに変換
+    selected_data = escape_html(selected_data)
+
+    # 検索機能
+    search_term = st.text_input('Search here')
+    if search_term:
+        selected_data = selected_data[selected_data[selected_columns].apply(lambda x: search_term.lower() in x.astype(str).lower().values, axis=1)]
+        
+    # HTML形式でデータフレームを出力
+    st.markdown(selected_data.style.set_table_attributes('style="width: 100%"').render(), unsafe_allow_html=True)
+
+    # 合計の表示
+    if selected_data.select_dtypes(include=[np.number]).columns.any():  # check if there is any number column
+        st.subheader('Total')
+        total = selected_data.select_dtypes(include=[np.number]).sum().sum()  # sum only number columns
+        total = round(total)  # round to integer
+        st.markdown(f'<h1 style="color: red;">{total}</h1>', unsafe_allow_html=True)  # display in large red font
